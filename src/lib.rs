@@ -109,7 +109,7 @@ pub fn nanos(d: Duration) -> u64 {
 ///
 ///     // do important stuff ...
 ///
-/// #   break
+/// # break
 /// }
 /// ```
 ///

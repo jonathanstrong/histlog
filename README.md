@@ -74,8 +74,6 @@ loop {
     spintime.check_try_send(loop_time).unwrap(); // non-blocking equivalent (can fail)
 
     // do important stuff ...
-
-#   break
 }
 ```
 
