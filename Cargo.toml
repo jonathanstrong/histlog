@@ -10,7 +10,7 @@ license = "MIT"
 license-file = "LICENSE"
 readme = "README.md"
 keywords = ["statistics", "analytics", "sampling", "hdrhistogram", "histogram"]
-categories = ["Data structures", "Profiling", "Development tools", "Encoding", "Filesystem"]
+categories = ["development-tools:profiling", "asynchronous", "filesystem", "encoding"]
 
 [dependencies]
 hdrhistogram = "6"
