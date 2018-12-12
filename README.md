@@ -79,7 +79,7 @@ loop {
 }
 ```
 
-# logs
+## logs
 
 Logs are saved to `<log dir>/<series name>.<datetime>.hdrhistogram-interval-log.v2.gz`.
 
@@ -101,10 +101,10 @@ Log file can be viewed/analyzed [here](https://hdrhistogram.github.io/HdrHistogr
 [Full documentation](https://docs.rs/hdrhistogram/6.1.1/hdrhistogram/serialization/interval_log/index.html) of log
 serialization available from the `hdrhistogram` crate.
 
-# limitations
+## limitations
 
 - The series name and tags are currently limited to `&'static str` because the overhead of using
-`String` would be prohibitive. This may change in future versions if a performant means of
+`String` is prohibitive. This may change in future versions if a performant means of
 allowing dynamic tags presents itself that's not inordinately complicated to use.
 - `HistLog::check_send` and `HistLog::check_try_send` create a new `hdrhistogram::Histogram`
 and send the current/prev one to the writer thread each interval. Internally, an
