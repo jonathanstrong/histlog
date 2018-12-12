@@ -1,0 +1,10 @@
+[package]
+name = "histlog"
+version = "0.1.0"
+authors = ["Jonathan Strong <jonathan.strong@gmail.com>"]
+edition = "2018"
+
+[dependencies]
+hdrhistogram = "6"
+crossbeam-channel = "0.3"
+chrono = "0.4"
