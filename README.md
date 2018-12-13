@@ -1,6 +1,6 @@
 # histlog
 
-![](https://img.shields.io/crates/v/histlog.svg)
+![](https://img.shields.io/crates/v/histlog.svg) ![](https://docs.rs/histlog/badge.svg)
 
 Provides off-thread serialization of HdrHistogram interval logs to file.
 
