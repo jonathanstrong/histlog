@@ -1,5 +1,7 @@
 # histlog
 
+![](https://img.shields.io/crates/v/histlog.svg)
+
 Provides off-thread serialization of HdrHistogram interval logs to file.
 
 For use with the [`hdrhistogram`](https://crates.io/crates/hdrhistogram) crate,
