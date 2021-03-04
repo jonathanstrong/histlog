@@ -210,7 +210,7 @@ impl HistLog {
 
     // not sure if this is a good thing to have
     //
-    #[doc(hide)]
+    #[doc(hidden)]
     pub fn new_with_tag(&self, tag: &'static str) -> Result<Self, Error> {
         let mut save_dir = self.filename.clone();
         if !save_dir.pop() { // `.pop` should remove the file name, leaving dir
@@ -249,7 +249,7 @@ impl HistLog {
         }
     }
 
-    #[doc(hide)]
+    #[doc(hidden)]
     pub fn clone_with_tag_and_freq(&self, tag: &'static str, freq: Duration) -> Self {
         let mut clone = self.clone_with_tag(tag);
         clone.freq = freq;
