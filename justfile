@@ -1,6 +1,6 @@
 export RUSTFLAGS := `[ -x /usr/bin/lld ] && echo "-C link-arg=-fuse-ld=lld" || echo ''`
 
-publish-registry := "crates.io"
+publish-registry := "crates-io"
 
 cargo +args='':
     cargo {{args}}
