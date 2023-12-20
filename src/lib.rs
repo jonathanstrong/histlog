@@ -407,9 +407,9 @@ impl HistLog {
     fn get_filename(save_dir: &Path, series: &SeriesName) -> PathBuf {
         let now = Utc::now();
         let filename =
-            format!("{series}.{time}.hdrhistogram-interval-log.v2.gz",
+            format!("{series}.{time}.hlog",
                 series = series, 
-                time = now.format("%Y-%m-%d-%H:%M:%SZ"));
+                time = now.format("%Y-%m-%d-%H%M%SZ"));
         save_dir.join(filename)
     }
 
