@@ -13,6 +13,6 @@ keywords = ["statistics", "analytics", "sampling", "hdrhistogram", "histogram"]
 categories = ["development-tools::profiling", "asynchronous", "filesystem", "encoding"]
 
 [dependencies]
-hdrhistogram = "6"
-crossbeam-channel = "0.3"
+hdrhistogram = "7.5.4"
+crossbeam-channel = "0.5"
 chrono = "0.4"
