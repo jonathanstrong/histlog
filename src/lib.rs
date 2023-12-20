@@ -252,6 +252,7 @@ impl HistLog {
         Self::inner_new(save_dir, series, tag, freq)
     }
 
+    #[allow(clippy::needless_borrows_for_generic_args)]
     fn inner_new<P>(save_dir: P, series: SeriesName, tag: Tag, freq: Duration) -> Result<Self, Error>
         where P: AsRef<Path>
     {
@@ -407,10 +408,13 @@ impl HistLog {
         Ok(expired)
     }
 
-    fn get_filename(save_dir: &Path, series: &SeriesName) -> PathBuf {
+    fn get_filename<S: AsRef<str>>(save_dir: &Path, series: S) -> PathBuf {
+        use rand::prelude::*;
         let now = Utc::now();
+        let id: u32 = thread_rng().gen();
+        let series: &str = series.as_ref();
         let filename =
-            format!("{series}.{time}.hlog",
+            format!("{series}.{time}.{id:x}.hlog",
                 series = series, 
                 time = now.format("%Y-%m-%d-%H%M%SZ"));
         save_dir.join(filename)
@@ -564,4 +568,14 @@ mod tests {
         }
     }
 
+    #[test]
+    fn generated_hlog_filenames_are_unique() {
+        let save_dir = Path::new("a/b/c");
+        let series = "d-e-f";
+        let filenames: Vec<PathBuf> = (0..1000)
+            .map(|_| HistLog::get_filename(&save_dir, &series))
+            .collect();
+        let unique = filenames.iter().cloned().collect::<std::collections::HashSet<_>>();
+        assert_eq!(filenames.len(), unique.len());
+    }
 }
