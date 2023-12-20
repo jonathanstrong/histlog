@@ -41,7 +41,7 @@ pub type Tag = SmolStr;
 
 /// Significant figure passed to `hdrhistogram::Histogram::new` upon
 /// construction
-pub const SIG_FIG: u8 = 3;
+pub const DEFAULT_SIG_FIG: u8 = 3;
 /// Capacity of `crossbeam_channel::bounded` queue used to communicate
 /// between the measuring thread and the writer thread
 pub const CHANNEL_SIZE: usize = 8;
@@ -158,11 +158,14 @@ pub fn nanos(d: Duration) -> u64 {
 /// [Full documentation](https://docs.rs/hdrhistogram/6.1.1/hdrhistogram/serialization/interval_log/index.html) of log
 /// serialization available from the `hdrhistogram` crate.
 ///
+/// # Features
+///
+/// - `minstant`: use `minstant::Instant` as a faster replacement for `std::time::Instant`
+/// - `smol_str`: switch `&'static str` for `smol_str::SmolStr` for the `SeriesName` and `Tag`
+///   types, allowing dynamic string values to be provided instead of static strings.
+///
 /// # Limitations
 ///
-/// - The series name and tags are currently limited to `&'static str` because the overhead of using
-/// `String` is prohibitive. This may change in future versions if a performant means of
-/// allowing dynamic tags presents itself that's not inordinately complicated to use.
 /// - `HistLog::check_send` and `HistLog::check_try_send` create a new `hdrhistogram::Histogram`
 /// and send the current/prev one to the writer thread each interval. Internally, an
 /// `hdrhistogram::Histogram` uses a `Vec` to store its counts, so there's an allocation involved.
@@ -234,13 +237,21 @@ impl HistLog {
     ///
     /// If `save_dir` does not exist, will attempt to create it (which could
     /// fail). Creating a new log file could fail. Spawning the writer thread could fail.
+    ///
+    /// Default significant figures of `3` is used.
     #[cfg(not(feature = "smol_str"))]
     pub fn new<P>(save_dir: P, series: SeriesName, tag: Tag, freq: Duration) -> Result<Self, Error>
         where P: AsRef<Path>
     {
-        Self::inner_new(save_dir, series, tag, freq)
+        Self::new_with_sig_fig(DEFAULT_SIG_FIG, save_dir, series, tag, freq)
     }
 
+    /// Create a new `HistLog`.
+    ///
+    /// If `save_dir` does not exist, will attempt to create it (which could
+    /// fail). Creating a new log file could fail. Spawning the writer thread could fail.
+    ///
+    /// Default significant figures of `3` is used.
     #[cfg(feature = "smol_str")]
     pub fn new<P, S, T>(save_dir: P, series: S, tag: T, freq: Duration) -> Result<Self, Error>
         where P: AsRef<Path>,
@@ -249,11 +260,49 @@ impl HistLog {
     {
         let series = SmolStr::new(series.as_ref());
         let tag = SmolStr::new(tag.as_ref());
-        Self::inner_new(save_dir, series, tag, freq)
+        Self::new_with_sig_fig(DEFAULT_SIG_FIG, save_dir, series, tag, freq)
+    }
+
+    /// Create a new `HistLog`, specifying the number of significant digits
+    #[cfg(not(feature = "smol_str"))]
+    pub fn new_with_sig_fig<P>(
+        sig_fig: u8,
+        save_dir: P,
+        series: SeriesName,
+        tag: Tag,
+        freq: Duration,
+    ) -> Result<Self, Error>
+        where P: AsRef<Path>
+    {
+        Self::inner_new(sig_fig, save_dir, series, tag, freq)
+    }
+
+    /// Create a new `HistLog`, specifying the number of significant digits
+    #[cfg(feature = "smol_str")]
+    pub fn new_with_sig_fig<P, S, T>(
+        sig_fig: u8,
+        save_dir: P,
+        series: S,
+        tag: T,
+        freq: Duration,
+    ) -> Result<Self, Error>
+        where P: AsRef<Path>,
+              S: AsRef<str>,
+              T: AsRef<str>
+    {
+        let series = SmolStr::new(series.as_ref());
+        let tag = SmolStr::new(tag.as_ref());
+        Self::inner_new(sig_fig, save_dir, series, tag, freq)
     }
 
     #[allow(clippy::needless_borrows_for_generic_args)]
-    fn inner_new<P>(save_dir: P, series: SeriesName, tag: Tag, freq: Duration) -> Result<Self, Error>
+    fn inner_new<P>(
+        sig_fig: u8,
+        save_dir: P,
+        series: SeriesName,
+        tag: Tag,
+        freq: Duration,
+    ) -> Result<Self, Error>
         where P: AsRef<Path>
     {
         let save_dir = save_dir.as_ref().to_path_buf();
@@ -262,7 +311,7 @@ impl HistLog {
         let (tx, rx) = channel::bounded(CHANNEL_SIZE);
         let thread = Some(Arc::new(Self::scribe(scribe_series, rx, filename.as_path())?));
         let last_sent = Instant::now();
-        let hist = Histogram::new(SIG_FIG).expect("Histogram::new"); //.map_err(Error::HdrCreation)?;
+        let hist = Histogram::new(sig_fig).expect("Histogram::new"); //.map_err(Error::HdrCreation)?;
         Ok(Self { filename, series, tag, freq, last_sent, tx, hist, thread })
     }
 
