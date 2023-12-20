@@ -543,7 +543,7 @@ impl Drop for HistLog {
     /// to the underlying writer thread, and, if so, sends a terminate signal to the
     /// writer thread and attempts to join it.
     ///
-    /// # May Pause Up To 5ms
+    /// # May Pause Up To 100ms
     ///
     /// In the event the channel to the writer thread is full, will continue trying
     /// to send a terminate command (busy polling the channel) until `DROP_DEADLINE`
