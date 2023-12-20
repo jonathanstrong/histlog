@@ -3,8 +3,12 @@
 //! logs to file.
 //!
 
+// there's a bunch of places we .clone() what is either a &'static str or
+// a SmolStr and it would be pretty tedious to work around the warning
+#![cfg_attr(not(feature = "smol_str"), allow(noop_method_call))]
+
 use std::sync::Arc;
-use std::time::{Instant, Duration, SystemTime, UNIX_EPOCH};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 #[cfg(not(feature = "minstant"))]
 use std::time::Instant;
 use std::path::{Path, PathBuf};
@@ -14,11 +18,26 @@ use std::{mem, fs};
 
 use hdrhistogram::{Histogram};
 use hdrhistogram::serialization::V2DeflateSerializer;
-use hdrhistogram::serialization::interval_log::{IntervalLogWriterBuilder, Tag};
+use hdrhistogram::serialization::interval_log::{IntervalLogWriterBuilder};
 use crossbeam_channel as channel;
 use chrono::Utc;
+#[cfg(feature = "minstant")]
+use minstant::Instant;
+#[cfg(feature = "smol_str")]
+use smol_str::SmolStr;
 
-type C = u64;
+/// Type of value recorded to the hdrhistogram
+pub type C = u64;
+
+#[cfg(not(feature = "smol_str"))]
+pub type SeriesName = &'static str;
+#[cfg(feature = "smol_str")]
+pub type SeriesName = SmolStr;
+
+#[cfg(not(feature = "smol_str"))]
+pub type Tag = &'static str;
+#[cfg(feature = "smol_str")]
+pub type Tag = SmolStr;
 
 /// Significant figure passed to `hdrhistogram::Histogram::new` upon
 /// construction
@@ -28,7 +47,7 @@ pub const SIG_FIG: u8 = 3;
 pub const CHANNEL_SIZE: usize = 8;
 /// Amount of time `HistLog::drop` will spin on a full channel to
 /// the writer thread to send a terminate signal
-pub const DROP_DEADLINE: Duration = Duration::from_millis(5);
+pub const DROP_DEADLINE: Duration = Duration::from_millis(100);
 
 /// Returns `Duration` as number of nanoseconds (`u64`)
 ///
@@ -151,8 +170,8 @@ pub fn nanos(d: Duration) -> u64 {
 ///
 pub struct HistLog {
     filename: PathBuf,
-    series: &'static str,
-    tag: &'static str,
+    series: SeriesName,
+    tag: Tag,
     freq: Duration,
     last_sent: Instant,
     tx: channel::Sender<Option<Entry>>,
@@ -161,7 +180,7 @@ pub struct HistLog {
 }
 
 struct Entry {
-    pub tag: &'static str,
+    pub tag: Tag,
     pub start: SystemTime,
     pub end: SystemTime,
     pub hist: Histogram<C>,
@@ -178,12 +197,12 @@ pub enum Error {
 
 impl Clone for HistLog {
     fn clone(&self) -> Self {
-        let thread = self.thread.as_ref().map(|x| Arc::clone(x));
+        let thread = self.thread.as_ref().map(Arc::clone);
         Self {
             filename: self.filename.clone(),
             series: self.series.clone(),
             tag: self.tag.clone(),
-            freq: self.freq.clone(),
+            freq: self.freq,
             last_sent: Instant::now(),
             tx: self.tx.clone(),
             hist: self.hist.clone(),
@@ -197,16 +216,35 @@ impl HistLog {
     ///
     /// If `save_dir` does not exist, will attempt to create it (which could
     /// fail). Creating a new log file could fail. Spawning the writer thread could fail.
-    pub fn new<P>(save_dir: P, series: &'static str, tag: &'static str, freq: Duration) -> Result<Self, Error>
+    #[cfg(not(feature = "smol_str"))]
+    pub fn new<P>(save_dir: P, series: SeriesName, tag: Tag, freq: Duration) -> Result<Self, Error>
+        where P: AsRef<Path>
+    {
+        Self::inner_new(save_dir, series, tag, freq)
+    }
+
+    #[cfg(feature = "smol_str")]
+    pub fn new<P, S, T>(save_dir: P, series: S, tag: T, freq: Duration) -> Result<Self, Error>
+        where P: AsRef<Path>,
+              S: AsRef<str>,
+              T: AsRef<str>
+    {
+        let series = SmolStr::new(series.as_ref());
+        let tag = SmolStr::new(tag.as_ref());
+        Self::inner_new(save_dir, series, tag, freq)
+    }
+
+    fn inner_new<P>(save_dir: P, series: SeriesName, tag: Tag, freq: Duration) -> Result<Self, Error>
         where P: AsRef<Path>
     {
         if !save_dir.as_ref().exists() {
             fs::create_dir_all(save_dir.as_ref()).map_err(Error::Io)?;
         }
         let save_dir = save_dir.as_ref().to_path_buf();
-        let filename = Self::get_filename(&save_dir, series);
+        let scribe_series = series.clone();
+        let filename = Self::get_filename(&save_dir, &series);
         let (tx, rx) = channel::bounded(CHANNEL_SIZE);
-        let thread = Some(Arc::new(Self::scribe(series, rx, filename.as_path())?));
+        let thread = Some(Arc::new(Self::scribe(scribe_series, rx, filename.as_path())?));
         let last_sent = Instant::now();
         let hist = Histogram::new(SIG_FIG).expect("Histogram::new"); //.map_err(Error::HdrCreation)?;
         Ok(Self { filename, series, tag, freq, last_sent, tx, hist, thread })
@@ -215,13 +253,13 @@ impl HistLog {
     // not sure if this is a good thing to have
     //
     #[doc(hidden)]
-    pub fn new_with_tag(&self, tag: &'static str) -> Result<Self, Error> {
+    pub fn new_with_tag(&self, tag: Tag) -> Result<Self, Error> {
         let mut save_dir = self.filename.clone();
         if !save_dir.pop() { // `.pop` should remove the file name, leaving dir
             return Err(Error::Io(io::Error::new(io::ErrorKind::Other,
                 "`filename.pop()` returned `false`! expected it to have a file name, return `true`.")))
         }
-        Self::new(save_dir, self.series, tag, self.freq)
+        Self::new(save_dir, self.series.clone(), tag, self.freq)
     }
 
     /// Returns the path of the log file the `HistLog` is writing to.
@@ -236,14 +274,25 @@ impl HistLog {
     ///
     /// No effort is made to check whether `tag` is a duplicate of a previous tag,
     /// and using a duplicate may produce unexpected results.
-    pub fn clone_with_tag(&self, tag: &'static str) -> Self {
+    #[cfg(not(feature = "smol_str"))]
+    pub fn clone_with_tag(&self, tag: Tag) -> Self {
+        self.inner_clone_with_tag(tag)
+    }
+
+    #[cfg(feature = "smol_str")]
+    pub fn clone_with_tag<T: AsRef<str>>(&self, tag: T) -> Self {
+        let tag = SmolStr::new(tag.as_ref());
+        self.inner_clone_with_tag(tag)
+    }
+
+    fn inner_clone_with_tag(&self, tag: Tag) -> Self {
         assert!(self.thread.is_some(),
             "self.thread cannot be `None` unless `HistLog` was already dropped");
-        let thread = self.thread.as_ref().map(|x| Arc::clone(x)).unwrap();
+        let thread = self.thread.as_ref().map(Arc::clone).unwrap();
         let tx = self.tx.clone();
         Self {
             filename: self.filename.clone(),
-            series: self.series,
+            series: self.series.clone(),
             tag,
             freq: self.freq,
             last_sent: Instant::now(),
@@ -254,7 +303,7 @@ impl HistLog {
     }
 
     #[doc(hidden)]
-    pub fn clone_with_tag_and_freq(&self, tag: &'static str, freq: Duration) -> Self {
+    pub fn clone_with_tag_and_freq(&self, tag: Tag, freq: Duration) -> Self {
         let mut clone = self.clone_with_tag(tag);
         clone.freq = freq;
         clone
@@ -285,7 +334,7 @@ impl HistLog {
         assert!(end > start, "end <= start!");
         let mut next = Histogram::new_from(&self.hist);
         mem::swap(&mut self.hist, &mut next);
-        self.tx.send(Some(Entry { tag: self.tag, start, end, hist: next })).ok(); //.expect("sending entry failed");
+        self.tx.send(Some(Entry { tag: self.tag.clone(), start, end, hist: next })).ok(); //.expect("sending entry failed");
         self.last_sent = loop_time;
     }
 
@@ -295,7 +344,7 @@ impl HistLog {
         assert!(end > start, "end <= start!");
         let mut next = Histogram::new_from(&self.hist);
         mem::swap(&mut self.hist, &mut next);
-        let entry = Entry { tag: self.tag, start, end, hist: next };
+        let entry = Entry { tag: self.tag.clone(), start, end, hist: next };
         match self.tx.try_send(Some(entry)) {
             Ok(_) => {
                 self.last_sent = loop_time;
@@ -340,17 +389,17 @@ impl HistLog {
         Ok(expired)
     }
 
-    fn get_filename(save_dir: &PathBuf, series: &'static str) -> PathBuf {
+    fn get_filename(save_dir: &Path, series: &SeriesName) -> PathBuf {
         let now = Utc::now();
         let filename =
             format!("{series}.{time}.hdrhistogram-interval-log.v2.gz",
                 series = series, 
                 time = now.format("%Y-%m-%d-%H:%M:%SZ"));
-        save_dir.join(&filename)
+        save_dir.join(filename)
     }
 
     fn scribe(
-        series: &'static str,
+        series: SeriesName,
         rx: channel::Receiver<Option<Entry>>,
         filename: &Path,
     ) -> Result<JoinHandle<Result<usize, Error>>, Error> {
@@ -381,8 +430,10 @@ impl HistLog {
                         // is mitigating, because typically if you can create the file,
                         // you can write to it, too.
                         //
+                        #[cfg(feature = "smol_str")]
+                        let tag: &str = tag.as_ref();
                         wtr.write_histogram(&hist, start.duration_since(UNIX_EPOCH).unwrap(),
-                                            end.duration_since(start).unwrap(), Tag::new(tag))
+                                            end.duration_since(start).unwrap(), hdrhistogram::serialization::interval_log::Tag::new(tag))
                             .ok();
                         n_rcvd += 1;
                     }

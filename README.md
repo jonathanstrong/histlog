@@ -104,13 +104,11 @@ serialization available from the `hdrhistogram` crate.
 ## features
 
 - `minstant`: replaces `std::time::Instant` with `minstant::Instant`, which is generally faster and a drop-in replacement with the same API.
+- `smol_str`: switches `smol_str::SmolStr` for `&'static str` as the type for both series names (`SeriesName` type alias) and tags (`Tag` type alias). `SmolStr` allows dynamic strings without heap allocations up to a certain size, so this feature enables dynamic values for both series names and tag values.
 
 ## limitations
 
-- The series name and tags are currently limited to `&'static str` because the overhead of using
-`String` is prohibitive. This may change in future versions if a performant means of
-allowing dynamic tags presents itself that's not inordinately complicated to use.
 - `HistLog::check_send` and `HistLog::check_try_send` create a new `hdrhistogram::Histogram`
 and send the current/prev one to the writer thread each interval. Internally, an
 `hdrhistogram::Histogram` uses a `Vec` to store its counts, so there's an allocation involved.
-- Only `u64` values can be recorded, currently.
+- Only `u64` values can be recorded (see the `C` type alias).
