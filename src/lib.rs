@@ -330,6 +330,7 @@ impl HistLog {
     /// for further deails. The `hdrhistogram::Histogram` used by `HistLog`
     /// is created with a significant figure of 3 (`histlog::SIG_FIG` const).
     ///
+    #[inline]
     pub fn record(&mut self, value: u64) -> Result<(), Error> {
         self.hist.record(value).map_err(Error::HdrRecord)
     }
@@ -398,8 +399,10 @@ impl HistLog {
     /// including a disconnected channel, encountered while trying to send to the
     /// writer thread.
     ///
+    #[inline]
     pub fn check_try_send(&mut self, loop_time: Instant) -> Result<bool, Error> {
-        let expired = loop_time > self.last_sent && loop_time - self.last_sent >= self.freq;
+        let elapsed = loop_time.saturating_duration_since(self.last_sent);
+        let expired = elapsed >= self.freq;
         if expired { self.try_send(loop_time)?; }
         Ok(expired)
     }
