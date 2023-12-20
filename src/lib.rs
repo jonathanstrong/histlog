@@ -5,6 +5,8 @@
 
 use std::sync::Arc;
 use std::time::{Instant, Duration, SystemTime, UNIX_EPOCH};
+#[cfg(not(feature = "minstant"))]
+use std::time::Instant;
 use std::path::{Path, PathBuf};
 use std::thread::{self, JoinHandle};
 use std::io;
@@ -93,6 +95,8 @@ pub fn nanos(d: Duration) -> u64 {
 ///
 /// ```
 /// use std::time::*;
+/// #[cfg(feature = "minstant")]
+/// use minstant::Instant;
 ///
 /// let mut spintime = histlog::HistLog::new("/tmp/var/hist", "spintime", "main", Duration::from_secs(60)).unwrap();
 ///

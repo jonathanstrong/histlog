@@ -101,6 +101,10 @@ Log file can be viewed/analyzed [here](https://hdrhistogram.github.io/HdrHistogr
 [Full documentation](https://docs.rs/hdrhistogram/6.1.1/hdrhistogram/serialization/interval_log/index.html) of log
 serialization available from the `hdrhistogram` crate.
 
+## features
+
+- `minstant`: replaces `std::time::Instant` with `minstant::Instant`, which is generally faster and a drop-in replacement with the same API.
+
 ## limitations
 
 - The series name and tags are currently limited to `&'static str` because the overhead of using

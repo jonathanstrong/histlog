@@ -16,3 +16,7 @@ categories = ["development-tools::profiling", "asynchronous", "filesystem", "enc
 hdrhistogram = "7.5.4"
 crossbeam-channel = "0.5"
 chrono = "0.4"
+minstant = { version = "0.1.4", optional = true }
+
+[features]
+default = ["minstant"]
