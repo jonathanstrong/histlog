@@ -26,7 +26,11 @@ verify-release-tag-does-not-exist:
 
 pre-release:
     just cargo check \
+        && just cargo test \
         && just cargo clippy \
+        && just cargo check --features smol_str \
+        && just cargo test --features smol_str \
+        && just cargo clippy --features smol_str \
         && echo "awesome job!"
 
 publish +args='': verify-clean-git verify-release-tag-does-not-exist pre-release
