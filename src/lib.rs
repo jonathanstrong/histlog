@@ -195,6 +195,24 @@ pub enum Error {
     TrySend(channel::TrySendError<()>),
 }
 
+impl std::fmt::Display for Error {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        match self {
+            Error::Io(e) => write!(f, "Io({e})"),
+            Error::HdrRecord(e) => write!(f, "HdrRecord({e})"),
+            Error::TrySend(e) => write!(f, "TrySend({e})"),
+        }
+    }
+}
+
+impl std::error::Error for Error {}
+
+impl From<io::Error> for Error {
+    fn from(err: io::Error) -> Self {
+        Error::Io(err)
+    }
+}
+
 impl Clone for HistLog {
     fn clone(&self) -> Self {
         let thread = self.thread.as_ref().map(Arc::clone);
