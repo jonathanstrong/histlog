@@ -255,9 +255,6 @@ impl HistLog {
     fn inner_new<P>(save_dir: P, series: SeriesName, tag: Tag, freq: Duration) -> Result<Self, Error>
         where P: AsRef<Path>
     {
-        if !save_dir.as_ref().exists() {
-            fs::create_dir_all(save_dir.as_ref()).map_err(Error::Io)?;
-        }
         let save_dir = save_dir.as_ref().to_path_buf();
         let scribe_series = series.clone();
         let filename = Self::get_filename(&save_dir, &series);
@@ -416,6 +413,24 @@ impl HistLog {
         save_dir.join(filename)
     }
 
+    fn ensure_parent_dir_exists<P: AsRef<Path>>(path: P) -> Result<(), io::Error> {
+        let path: &Path = path.as_ref();
+        match path.parent() {
+            Some(parent) if parent.exists() => Ok(()),
+            Some(parent) => {
+                std::fs::create_dir_all(parent)?;
+                Ok(())
+            }
+
+            None => {
+                Err(io::Error::new(
+                    io::ErrorKind::InvalidInput,
+                    format!("parent path (of {}) is not a directory", path.display()),
+                ))
+            }
+        }
+    }
+
     fn scribe(
         series: SeriesName,
         rx: channel::Receiver<Option<Entry>>,
@@ -423,6 +438,7 @@ impl HistLog {
     ) -> Result<JoinHandle<Result<usize, Error>>, Error> {
         let mut ser = V2DeflateSerializer::new();
         let start_time = SystemTime::now();
+        Self::ensure_parent_dir_exists(filename)?;
         let file = fs::File::create(filename).map_err(Error::Io)?;
         thread::Builder::new().name(format!("histlog:{}", series)).spawn(move || {
             let mut buf = io::LineWriter::new(file);
