@@ -308,7 +308,8 @@ impl HistLog {
     ) -> Result<Self, Error>
         where P: AsRef<Path>
     {
-        Self::inner_new(max, sig_fig, save_dir, series, tag, freq)
+        let hist = Histogram::new_with_max(max, sig_fig).expect("Histogram::new_with_max");
+        Self::new_from(&hist, save_dir, series, tag, freq)
     }
 
     /// Create a new `HistLog`, specifying the max value and number of significant digits
@@ -327,13 +328,15 @@ impl HistLog {
     {
         let series = SmolStr::new(series.as_ref());
         let tag = SmolStr::new(tag.as_ref());
-        Self::inner_new(max, sig_fig, save_dir, series, tag, freq)
+        let hist = Histogram::new_with_max(max, sig_fig).expect("Histogram::new_with_max");
+        Self::new_from(&hist, save_dir, series, tag, freq)
     }
 
-    #[allow(clippy::needless_borrows_for_generic_args)]
-    fn inner_new<P>(
-        max: u64,
-        sig_fig: u8,
+    /// Create a new `HistLog` by providing a template `hdrhistogram::Histogram` for it to use in
+    /// recording the interval logs.
+    #[cfg(not(feature = "smol_str"))]
+    pub fn new_from<P>(
+        template_hist: &Histogram<C>,
         save_dir: P,
         series: SeriesName,
         tag: Tag,
@@ -342,14 +345,40 @@ impl HistLog {
         where P: AsRef<Path>
     {
         let save_dir = save_dir.as_ref().to_path_buf();
+        let filename = Self::get_filename(&save_dir, series);
+        let (tx, rx) = channel::bounded(CHANNEL_SIZE);
+        let thread = Some(Arc::new(Self::scribe(series, rx, filename.as_path())?));
+        let last_sent = Instant::now();
+        let hist = Histogram::new_from(template_hist);
+        Ok(Self { filename, series, tag, freq, last_sent, tx, hist, thread })
+    }
+
+    /// Create a new `HistLog` by providing a template `hdrhistogram::Histogram` for it to use in
+    /// recording the interval logs.
+    #[cfg(feature = "smol_str")]
+    pub fn new_from<P, S, T>(
+        template_hist: &Histogram<C>,
+        save_dir: P,
+        series: S,
+        tag: T,
+        freq: Duration,
+    ) -> Result<Self, Error>
+        where P: AsRef<Path>,
+              S: AsRef<str>,
+              T: AsRef<str>
+    {
+        let series = SmolStr::new(series.as_ref());
+        let tag = SmolStr::new(tag.as_ref());
+        let save_dir = save_dir.as_ref().to_path_buf();
         let scribe_series = series.clone();
         let filename = Self::get_filename(&save_dir, &series);
         let (tx, rx) = channel::bounded(CHANNEL_SIZE);
         let thread = Some(Arc::new(Self::scribe(scribe_series, rx, filename.as_path())?));
         let last_sent = Instant::now();
-        let hist = Histogram::new_with_max(max, sig_fig).expect("Histogram::new"); //.map_err(Error::HdrCreation)?;
+        let hist = Histogram::new_from(template_hist);
         Ok(Self { filename, series, tag, freq, last_sent, tx, hist, thread })
     }
+
 
     // not sure if this is a good thing to have
     //
@@ -636,7 +665,7 @@ mod tests {
 
     #[test]
     fn create_histlog_record_one_and_drop() {
-        let mut hist = HistLog::new("/tmp/histlog", "test", "red", Duration::from_millis(1)).unwrap();
+        let mut hist = HistLog::new("/tmp/histlog", "test", "red", Duration::from_millis(3)).unwrap();
         for i in 0..1000u64 {
             hist.record(i).unwrap();
         }
