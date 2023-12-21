@@ -1,8 +1,8 @@
 [package]
 name = "histlog"
-version = "2.1.0"
+version = "2.1.1"
 authors = ["Jonathan Strong <jonathan.strong@gmail.com>"]
-edition = "2018"
+edition = "2021"
 description = "For use with the hdrhistogram crate, provides off-thread serialization of HdrHistogram interval logs to file."
 homepage = "https://github.com/jonathanstrong/histlog"
 repository = "https://github.com/jonathanstrong/histlog"
