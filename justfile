@@ -24,6 +24,22 @@ verify-release-tag-does-not-exist:
     VERSION=$(just get-crate-version) \
         && test -z "$(git tag | rg \"v${VERSION}\")" # Error: tag appears to exist already
 
+# this is not really inteneded to use, just notes so I can remember next time
+# how to setup cross-compile for aarch64 of x86_64 linux ubuntu
+setup-cross-compile-aarch64:
+    rustup target add --toolchain nightly aarch64-unknown-linux-gnu
+    sudo apt-get install gcc-aarch64-linux-gnu
+    # then add this to ~/.cargo/config.toml
+    # 
+    # ```
+    # [target.aarch64-unknown-linux-gnu]
+    # linker = "aarch64-linux-gnu-gcc"
+    # ```
+
+pre-release-cross-compile-aarch64:
+    RUSTFLAGS='' cargo test --target aarch64-unknown-linux-gnu --no-run \
+        && RUSTFLAGS='' cargo test --target aarch64-unknown-linux-gnu --features smol_str --no-run
+
 pre-release:
     just cargo check \
         && just cargo test \
@@ -31,6 +47,7 @@ pre-release:
         && just cargo check --features smol_str \
         && just cargo test --features smol_str \
         && just cargo clippy --features smol_str \
+        && just pre-release-cross-compile-aarch64 \
         && echo "awesome job!"
 
 publish +args='': verify-clean-git verify-release-tag-does-not-exist pre-release

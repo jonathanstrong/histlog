@@ -9,8 +9,6 @@
 
 use std::sync::Arc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
-#[cfg(not(feature = "minstant"))]
-use std::time::Instant;
 use std::path::{Path, PathBuf};
 use std::thread::{self, JoinHandle};
 use std::io;
@@ -21,10 +19,17 @@ use hdrhistogram::serialization::V2DeflateSerializer;
 use hdrhistogram::serialization::interval_log::{IntervalLogWriterBuilder};
 use crossbeam_channel as channel;
 use chrono::Utc;
-#[cfg(feature = "minstant")]
-use minstant::Instant;
 #[cfg(feature = "smol_str")]
 use smol_str::SmolStr;
+
+// NOTE: `minstant::Instant` is quite a bit faster on x86/x86_64 cpus, but the
+// its fallback behavior of using `MONOTONIC_COARSE` when TSC is not available
+// is not a good fit for use with `histlog`. Therefore, even if the "minstant"
+// feature is enabled, we only use `minstant::Instant` on linux + x86/x86_64.
+#[cfg(all(feature = "minstant", target_os = "linux", any(target_arch = "x86", target_arch = "x86_64")))]
+use minstant::Instant;
+#[cfg(not(all(feature = "minstant", target_os = "linux", any(target_arch = "x86", target_arch = "x86_64"))))]
+use std::time::Instant;
 
 /// Type of value recorded to the hdrhistogram
 pub type C = u64;
