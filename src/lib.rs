@@ -421,6 +421,20 @@ impl HistLog {
         self.hist.record(value).map_err(Error::HdrRecord)
     }
 
+    /// From `hdrhistogram` docs:
+    ///
+    /// > Record value in the histogram, clamped to the range of the histogram.
+    /// 
+    /// > This method cannot fail, as any values that are too small or too large to be
+    /// > tracked will automatically be clamed to be in range. Be aware that this will
+    /// > hide extreme outliers from the resulting histogram without warning. Since the
+    /// > values are clamped, the histogram will also not be resized to accomodate the
+    /// > value, even if auto-resize is enabled.
+    #[inline]
+    pub fn saturating_record(&mut self, value: u64) {
+        self.hist.saturating_record(value)
+    }
+
     /// Reset the state of the internal histogram and the last sent value.
     ///
     /// One situation this might be used is if there was a pause in recording.
