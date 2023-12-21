@@ -42,6 +42,7 @@ pub type Tag = SmolStr;
 /// Significant figure passed to `hdrhistogram::Histogram::new` upon
 /// construction
 pub const DEFAULT_SIG_FIG: u8 = 3;
+pub const DEFAULT_MAX: u64 = 1_000_000_000;
 /// Capacity of `crossbeam_channel::bounded` queue used to communicate
 /// between the measuring thread and the writer thread
 pub const CHANNEL_SIZE: usize = 8;
@@ -274,7 +275,7 @@ impl HistLog {
     ) -> Result<Self, Error>
         where P: AsRef<Path>
     {
-        Self::inner_new(sig_fig, save_dir, series, tag, freq)
+        Self::new_with_max(DEFAULT_MAX, sig_fig, save_dir, series, tag, freq)
     }
 
     /// Create a new `HistLog`, specifying the number of significant digits
@@ -292,11 +293,46 @@ impl HistLog {
     {
         let series = SmolStr::new(series.as_ref());
         let tag = SmolStr::new(tag.as_ref());
-        Self::inner_new(sig_fig, save_dir, series, tag, freq)
+        Self::new_with_max(DEFAULT_MAX, sig_fig, save_dir, series, tag, freq)
+    }
+
+    /// Create a new `HistLog`, specifying the max value and number of significant digits
+    #[cfg(not(feature = "smol_str"))]
+    pub fn new_with_max<P>(
+        max: u64,
+        sig_fig: u8,
+        save_dir: P,
+        series: SeriesName,
+        tag: Tag,
+        freq: Duration,
+    ) -> Result<Self, Error>
+        where P: AsRef<Path>
+    {
+        Self::inner_new(max, sig_fig, save_dir, series, tag, freq)
+    }
+
+    /// Create a new `HistLog`, specifying the max value and number of significant digits
+    #[cfg(feature = "smol_str")]
+    pub fn new_with_max<P, S, T>(
+        max: u64,
+        sig_fig: u8,
+        save_dir: P,
+        series: S,
+        tag: T,
+        freq: Duration,
+    ) -> Result<Self, Error>
+        where P: AsRef<Path>,
+              S: AsRef<str>,
+              T: AsRef<str>
+    {
+        let series = SmolStr::new(series.as_ref());
+        let tag = SmolStr::new(tag.as_ref());
+        Self::inner_new(max, sig_fig, save_dir, series, tag, freq)
     }
 
     #[allow(clippy::needless_borrows_for_generic_args)]
     fn inner_new<P>(
+        max: u64,
         sig_fig: u8,
         save_dir: P,
         series: SeriesName,
@@ -311,7 +347,7 @@ impl HistLog {
         let (tx, rx) = channel::bounded(CHANNEL_SIZE);
         let thread = Some(Arc::new(Self::scribe(scribe_series, rx, filename.as_path())?));
         let last_sent = Instant::now();
-        let hist = Histogram::new(sig_fig).expect("Histogram::new"); //.map_err(Error::HdrCreation)?;
+        let hist = Histogram::new_with_max(max, sig_fig).expect("Histogram::new"); //.map_err(Error::HdrCreation)?;
         Ok(Self { filename, series, tag, freq, last_sent, tx, hist, thread })
     }
 
