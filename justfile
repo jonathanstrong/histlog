@@ -37,6 +37,7 @@ publish +args='': verify-clean-git verify-release-tag-does-not-exist pre-release
     @just cargo publish --registry {{publish-registry}} {{args}}
     echo "tagging release"
     git tag "v$(just get-crate-version)"
+    git push
     git push --tags
     rm -rf target/package
 
